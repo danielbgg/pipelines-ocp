@@ -1,0 +1,54 @@
+# Criação de projeto de desenvolvimento
+oc new-project dev-scc  
+
+# Criação de projeto de homologação
+oc new-project hint-scc 
+
+# Prover acesso ao usuário jenkins
+oc policy add-role-to-user edit system:serviceaccount:cicd2:jenkins -n imagens
+oc policy add-role-to-user edit system:serviceaccount:cicd2:jenkins -n dev-scc
+oc policy add-role-to-user edit system:serviceaccount:cicd2:jenkins -n hint-scc
+
+# Criação de projeto para as ferramentas de CICD
+oc new-project cicd --display-name="Ferramentas de CICD"
+
+# Instalação do Gogs (repositório GIT)
+oc new-app -f https://raw.githubusercontent.com/OpenShiftDemos/gogs-openshift-docker/master/openshift/gogs-persistent-template.yaml -p HOSTNAME=gogs-cicd2.URL -p SKIP_TLS_VERIFY=true
+
+Entrar no Gogs e criar usuário: demo com a senha: redhat@123
+Migrar o repositório: https://github.com/OpenShiftDemos/openshift-tasks para o repositório openshift-tasks
+
+# Instalação do Jenkins via console do Openshift
+Browse Catalog ⇒ Jenkins
+Fazer login no Jenkins e aceitar as permissões de acesso
+oc new-app jenkins-ephemeral
+oc new-app jenkins-persistent
+
+# Baixar a definição do pipeline
+curl -O https://raw.githubusercontent.com/latam-tech-office/testdrive-openshift/master/labs/tasks-pipeline.yaml
+Editar o conteúdo do arquivo baixado, alterando corretamente o nome dos projetos de desenvolvimento e produção criados. Habilitar o SonarQube.
+
+# Criação do pipeline
+oc create --filename tasks-pipeline.yaml 
+
+# Criação do banco de dados Postgresql para o SonarQube
+Browse Catalog ⇒ Postgresql
+User = sonar
+Password = sonar
+Database = sonar
+
+# Instalação do SonarQube
+oc new-app docker.io/openshiftdemos/sonarqube:6.0 \
+-e SONARQUBE_JDBC_USERNAME=sonar -e SONARQUBE_JDBC_PASSWORD=sonar -e SONARQUBE_JDBC_URL=jdbc:postgresql://postgresql/sonar
+oc expose service/sonarqube
+
+# Instalação do Nexus
+oc new-app https://raw.githubusercontent.com/OpenShiftDemos/nexus-openshift-docker/master/nexus-persistent.yaml
+
+
+1) Fazer login no Docker Registry do Openshift
+docker login -u oc whoami -p oc whoami -t docker-registry-default.URL
+
+
+2) Fazer push do(s) container(s)
+docker push docker-registry-default.URL/imagens/scc:1

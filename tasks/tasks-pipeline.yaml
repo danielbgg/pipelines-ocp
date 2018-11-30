@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: BuildConfig
+metadata:
+  name: tasks-pipeline
+spec:
+  triggers:
+    - type: GitHub
+      github:
+        secret: githubtasks
+    - type: Generic
+      generic:
+        secret: generictasks
+  runPolicy: Serial
+  source:
+    type: None
+  strategy:
+    jenkinsPipelineStrategy:
+      jenkinsfile: |-
+        node {
+
+           stage ('Deploy DEV') {
+             def userInput = input(
+               id: 'userInput', message: 'Tag para promoção para DEV', parameters: [
+               [$class: 'TextParameterDefinition', defaultValue: 'dev', description: 'Tag', name: 'tag']
+             ])
+             echo ("Tag: " +userInput)
+
+             sh "oc project demo-s2i"
+             sh "oc tag demo-s2i/tasks:${userInput} demo-tasks-dev/tasks:${userInput}"
+             sh "oc project demo-tasks-dev"
+             sh "oc delete bc,dc,svc,route -l app=tasks"
+             sh "oc new-app tasks:${userInput}"
+             sh "oc expose svc/tasks"
+           }
+
+
+           stage ('Deploy HINT') {
+             timeout(time:5, unit:'MINUTES') {
+                input message: "Promover para HINT?", ok: "Promote"
+             }
+
+             def userInput = input(
+               id: 'userInput', message: 'Tag para promoção para HINT', parameters: [
+               [$class: 'TextParameterDefinition', defaultValue: 'hint', description: 'Tag', name: 'tag']
+             ])
+             echo ("Tag: " +userInput)
+
+             sh "oc project demo-tasks-dev"
+             sh "oc tag demo-s2i/tasks:${userInput} demo-tasks-prod/tasks:${userInput}"
+             sh "oc project demo-tasks-prod"
+             sh "oc delete bc,dc,svc,route -l app=tasks"
+             sh "oc new-app tasks:${userInput}"
+             sh "oc expose svc/tasks"
+           }
+        }
+
+    type: JenkinsPipeline
+    type: Generic
+status:
+  lastVersion: 0
